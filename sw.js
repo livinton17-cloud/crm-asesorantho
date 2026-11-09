@@ -1,6 +1,6 @@
 /* CRM Asesorantho — service worker: permite abrir la app sin wifi.
    Al publicar una versión nueva, cambia el número de CACHE. */
-const CACHE = 'crm-asesorantho-v1.0.0';
+const CACHE = 'crm-asesorantho-v1.1.0';
 const ARCHIVOS = ['./', './index.html', './xlsx.full.min.js', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', e => {

@@ -262,7 +262,7 @@ if(!window.XLSX){var s=document.createElement('script');s.src='https://cdnjs.clo
    CRM Asesorantho — app web instalable, funciona sin wifi
    Datos: este dispositivo (localStorage) + Google Sheets (sync)
    ========================================================= */
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 const K_CFG = 'crmA_cfg', K_DB = 'crmA_db', K_DEMO = 'crmA_demo';
 
 const TABLAS = {
@@ -1323,18 +1323,32 @@ function exportarExcel(desde, hasta){
   catch(e){ toast('No se pudo descargar el archivo: ' + e.message, 'error'); }
 }
 
-const COLS_IMPORT = ['Tipo','Nombre*','Cédula/RUC','Empresa','Cargo','Teléfono*','Email','Ciudad','Origen','Línea de interés','Servicio','Etapa','Valor (USD)','Vencimiento','Notas'];
+const COLS_IMPORT = ['Tipo','Nombre*','Cédula/RUC','Empresa','Cargo','Teléfono*','Email','Ciudad','Origen','Línea de interés','Servicio','Etapa','Valor (USD)','Vencimiento','Notas','Ref'];
+const COLS_SEG = ['Ref','Cliente','Fecha*','Hora','Tipo','Seguimiento*'];
 function descargarPlantilla(){
   if(!excelListo()) return;
-  const ws = XLSX.utils.aoa_to_sheet([COLS_IMPORT, ['Persona','María José Cedeño','0912345678','','','0991234567','mj@correo.com','Guayaquil','Instagram','Firma electrónica','Firma 2 años','Ganado','22','2027-03-15','Cliente de ejemplo: borra esta fila']]);
+  const ws = XLSX.utils.aoa_to_sheet([COLS_IMPORT, ['Persona','María José Cedeño','0912345678','','','0991234567','mj@correo.com','Guayaquil','Instagram','Firma electrónica','Firma 2 años','Ganado','22','2027-03-15','Cliente de ejemplo: borra esta fila','C001']]);
   ws['!cols'] = COLS_IMPORT.map(c => ({wch: Math.max(12, c.length+4)}));
   const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Clientes');
-  const ayuda = [['Columna','Qué poner'],['Tipo','Persona o Empresa'],['Nombre*','Obligatorio'],['Teléfono*','Celular, ej. 0991234567 (se usa para WhatsApp)'],['Origen', ORIGENES.join(', ')],['Línea de interés', Object.keys(LINEAS).join(', ')],['Etapa', ETAPAS.join(', ')],['Vencimiento','Fecha en que vence la firma/visa (AAAA-MM-DD o dd/mm/aaaa)']];
+  const wsS = XLSX.utils.aoa_to_sheet([COLS_SEG, ['C001','María José Cedeño (ejemplo)', sumarDias(hoy(),1), '', 'WhatsApp', 'Ejemplo: pedir referidos']]);
+  wsS['!cols'] = [{wch:8},{wch:30},{wch:12},{wch:8},{wch:11},{wch:70}]; XLSX.utils.book_append_sheet(wb, wsS, 'Seguimientos');
+  const ayuda = [['Columna','Qué poner'],['Tipo','Persona o Empresa'],['Nombre*','Obligatorio'],['Teléfono*','Celular, ej. 0991234567 (se usa para WhatsApp)'],['Origen', ORIGENES.join(', ')],['Línea de interés', Object.keys(LINEAS).join(', ')],['Etapa', ETAPAS.join(', ')],['Vencimiento','Fecha en que vence la firma/visa (AAAA-MM-DD o dd/mm/aaaa)'],['Ref','Código corto del cliente (C001, C002…). Une cada cliente con sus filas de la pestaña Seguimientos.'],[''],['Pestaña Seguimientos','Una fila por tarea. Ref del cliente, Fecha (AAAA-MM-DD), Hora opcional, Tipo ('+TIPOS_ACT.join(', ')+') y la descripción. Se cargan en la Agenda del responsable elegido al importar. Sin Ref, se unen por el nombre del cliente.']];
   const w2 = XLSX.utils.aoa_to_sheet(ayuda); w2['!cols'] = [{wch:18},{wch:90}]; XLSX.utils.book_append_sheet(wb, w2, 'Instrucciones');
   XLSX.writeFile(wb, 'Plantilla_importacion_CRM_Asesorantho.xlsx');
 }
 
-const MAPA_COLS = {tipo:'tipo',nombre:'nombre',nombrecompleto:'nombre',razonsocial:'nombre',cedularuc:'identificacion',cedula:'identificacion',ruc:'identificacion',identificacion:'identificacion',empresa:'empresa',cargo:'cargo',telefono:'telefono',celular:'telefono',whatsapp:'telefono',movil:'telefono',email:'email',correo:'email',ciudad:'ciudad',origen:'origen',lineadeinteres:'linea',linea:'linea',servicio:'servicio',etapa:'etapa',valor:'valor',valorusd:'valor',vencimiento:'fechaVencimiento',fechadevencimiento:'fechaVencimiento',notas:'notas',responsable:'responsable'};
+const MAPA_COLS = {tipo:'tipo',nombre:'nombre',nombrecompleto:'nombre',razonsocial:'nombre',cedularuc:'identificacion',cedula:'identificacion',ruc:'identificacion',identificacion:'identificacion',empresa:'empresa',cargo:'cargo',telefono:'telefono',celular:'telefono',whatsapp:'telefono',movil:'telefono',email:'email',correo:'email',ciudad:'ciudad',origen:'origen',lineadeinteres:'linea',linea:'linea',servicio:'servicio',etapa:'etapa',valor:'valor',valorusd:'valor',vencimiento:'fechaVencimiento',fechadevencimiento:'fechaVencimiento',notas:'notas',responsable:'responsable',ref:'ref',referencia:'ref',codigo:'ref'};
+const MAPA_SEG = {ref:'ref',referencia:'ref',codigo:'ref',cliente:'cliente',nombre:'cliente',telefono:'telefono',celular:'telefono',fecha:'fecha',hora:'hora',tipo:'tipo',seguimiento:'descripcion',descripcion:'descripcion',tarea:'descripcion',actividad:'descripcion'};
+function leerSeguimientos(wb){
+  const ws = wb.Sheets['Seguimientos']; if(!ws) return [];
+  return XLSX.utils.sheet_to_json(ws, {defval:'', raw:true}).map(r => { const o = {}; for(const k in r){ const campo = MAPA_SEG[norm(k)]; if(campo) o[campo] = r[k]; } return o; })
+    .map(o => {
+      let hora = o.hora instanceof Date ? pad(o.hora.getHours())+':'+pad(o.hora.getMinutes()) : String(o.hora ?? '').trim();
+      if(!/^\d{1,2}:\d{2}$/.test(hora)) hora = ''; else hora = hora.padStart(5,'0');
+      return {ref:String(o.ref??'').trim(), cliente:String(o.cliente??'').trim(), telefono:String(o.telefono??'').trim(), fecha:fechaImport(o.fecha), hora,
+        tipo: TIPOS_ACT.find(t => norm(t)===norm(o.tipo)) || 'WhatsApp', descripcion:String(o.descripcion??'').trim()};
+    }).filter(o => o.fecha && o.descripcion && !/^ejemplo/i.test(o.descripcion));
+}
 function matchLinea(s){
   const n = norm(s); if(!n) return '';
   for(const l of Object.keys(LINEAS)) if(norm(l) === n || norm(LINEA_CORTA[l]) === n) return l;
@@ -1370,11 +1384,11 @@ function parseVCF(txt){
   }).filter(o => o.nombre || o.telefono);
 }
 
-let filasImport = [];
+let filasImport = [], segsImport = [];
 async function importarArchivo(file){
   if(!file) return;
   try{
-    let filas = [];
+    let filas = []; segsImport = [];
     if(/\.vcf$/i.test(file.name) || /vcard/i.test(file.type)){
       filas = parseVCF(await file.text());
     } else {
@@ -1382,6 +1396,7 @@ async function importarArchivo(file){
       const wb = XLSX.read(await file.arrayBuffer(), {type:'array', cellDates:true});
       const ws = wb.Sheets['Clientes'] || wb.Sheets[wb.SheetNames[0]];
       const raw = XLSX.utils.sheet_to_json(ws, {defval:'', raw:true});
+      segsImport = leerSeguimientos(wb);
       filas = raw.map(r => { const o = {}; for(const k in r){ const campo = MAPA_COLS[norm(k)]; if(campo) o[campo] = r[k]; } return o; })
         .map(o => {
           let tel = o.telefono instanceof Date ? '' : String(o.telefono ?? '').trim();
@@ -1389,7 +1404,7 @@ async function importarArchivo(file){
           let ced = String(o.identificacion ?? '').trim(); if(/^\d{9}$/.test(ced) || /^\d{12}$/.test(ced)) ced = '0' + ced;
           return {...o, nombre:String(o.nombre??'').trim(), telefono:tel, identificacion:ced, fechaVencimiento:fechaImport(o.fechaVencimiento),
             linea:matchLinea(o.linea), etapa: ETAPAS.find(e => norm(e)===norm(o.etapa)) || (o.linea ? 'Nuevo' : ''),
-            tipo: norm(o.tipo).startsWith('emp') ? 'Empresa' : 'Persona', origen: ORIGENES.find(x => norm(x)===norm(o.origen)) || (o.origen ? 'Otro' : ''), valor: String(o.valor ?? '')};
+            tipo: norm(o.tipo).startsWith('emp') ? 'Empresa' : 'Persona', origen: ORIGENES.find(x => norm(x)===norm(o.origen)) || (o.origen ? 'Otro' : ''), valor: String(o.valor ?? ''), ref: String(o.ref ?? '').trim()};
         }).filter(o => o.nombre && !/ejemplo/i.test(o.notas||''));
     }
     if(!filas.length){ toast('No encontré clientes en el archivo. Revisa que la primera fila tenga los títulos de la plantilla.','error'); return; }
@@ -1399,31 +1414,53 @@ async function importarArchivo(file){
       const clave = tel || (ced.length>=10 ? 'c'+ced : 'n'+norm(f.nombre));
       const dup = existentes.find(c => (tel && waNumber(c.telefono)===tel) || (ced.length>=10 && idNorm(c.identificacion)===ced)) || vistos.has(clave);
       vistos.add(clave);
-      return {...f, dup: !!dup, sel: !dup};
+      const existente = existentes.find(c => (tel && waNumber(c.telefono)===tel) || (ced.length>=10 && idNorm(c.identificacion)===ced));
+      const segs = segsImport.filter(s => f.ref ? s.ref === f.ref : ((s.telefono && waNumber(s.telefono)===tel) || (s.cliente && norm(s.cliente)===norm(f.nombre))));
+      return {...f, dup: !!dup, sel: !dup, existenteId: existente ? existente.id : '', segs};
     });
+    const nSegs = filasImport.reduce((t,f) => t + f.segs.length, 0);
     abrirModal(`${cab('Importar clientes')}
       <p class="small muted" style="margin-top:0">${filasImport.length} encontrados · ${filasImport.filter(f=>f.dup).length} parecen duplicados (desmarcados).</p>
       <div class="row" style="margin-bottom:6px"><button class="btn sm" onclick="filasImport.forEach(f=>f.sel=!f.dup);pintarImport()">Solo nuevos</button><button class="btn sm" onclick="filasImport.forEach(f=>f.sel=false);pintarImport()">Ninguno</button></div>
       <div id="impList" style="max-height:48vh;overflow-y:auto"></div>
       ${fld('Responsable de estos clientes', `<select id="impResp">${optsUsuarios(cfg.user)}</select>`)}
+      ${nSegs ? `<p class="small" style="margin:6px 0 0">${ic('clock','sm')} El archivo trae <b>${nSegs} seguimientos</b>: se agregarán a la Agenda del responsable.</p>
+      <label class="small" style="display:flex;gap:8px;align-items:center;margin-top:6px"><input type="checkbox" id="impSegDup" checked style="width:16px;height:16px;accent-color:var(--naranja)"> Agregar también los seguimientos de los duplicados al cliente que ya existe</label>` : ''}
       <div class="foot"><button class="btn" onclick="cerrarModal()">Cancelar</button><button class="btn pri" id="impBtn" onclick="confirmarImport()">Importar</button></div>`);
     pintarImport();
   } catch(e){ toast('No se pudo leer el archivo: ' + e.message, 'error'); }
 }
 function pintarImport(){
   $('#impList').innerHTML = filasImport.map((f,i) => `<label class="imp-row"><input type="checkbox" ${f.sel?'checked':''} onchange="filasImport[${i}].sel=this.checked;pintarImport()" style="width:18px;height:18px;accent-color:var(--naranja)">
-    <div class="grow"><b>${esc(f.nombre||'(sin nombre)')}</b><small>${esc([f.telefono,f.email,f.empresa].filter(Boolean).join(' · '))}${f.linea?' · '+esc(LINEA_CORTA[f.linea]):''}</small></div>
+    <div class="grow"><b>${esc(f.nombre||'(sin nombre)')}</b><small>${esc([f.telefono,f.email,f.empresa].filter(Boolean).join(' · '))}${f.linea?' · '+esc(LINEA_CORTA[f.linea]):''}${f.segs&&f.segs.length?' · '+f.segs.length+' seguimiento'+(f.segs.length>1?'s':''):''}</small></div>
     ${f.dup?'<span class="pill-due due-soon">Duplicado</span>':''}</label>`).join('');
   const n = filasImport.filter(f=>f.sel).length; $('#impBtn').textContent = `Importar ${n}`; $('#impBtn').disabled = !n;
 }
-function confirmarImport(){
-  const resp = $('#impResp').value; let n = 0;
-  filasImport.filter(f => f.sel).forEach(f => {
-    const c = guardar('clientes', {tipo:f.tipo||'Persona', nombre:f.nombre||f.telefono, identificacion:f.identificacion||'', empresa:f.empresa||'', cargo:f.cargo||'', telefono:f.telefono||'', email:f.email||'', ciudad:f.ciudad||'', origen:f.origen||'', etiquetas:'importado', notas:f.notas||'', responsable:resp});
-    if(f.linea) guardar('negocios', {clienteId:c.id, linea:f.linea, servicio:String(f.servicio||''), etapa:f.etapa||'Nuevo', valor:f.valor||'', fechaCierre:f.etapa==='Ganado'?hoy():'', fechaVencimiento:f.fechaVencimiento||'', responsable:resp, notas:''});
-    n++;
+function programarSegsImport(clienteId, negocioId, segs, resp){
+  let k = 0; const ya = actividadesDe(clienteId);
+  segs.forEach(s => {
+    if(ya.some(a => a.fecha === s.fecha && (a.descripcion||'') === s.descripcion)) return; // evita duplicar si se importa dos veces
+    guardar('actividades', {clienteId, negocioId:negocioId||'', tipo:s.tipo, descripcion:s.descripcion, fecha:s.fecha, hora:s.hora||'', programada:'SI', completada:'NO', hechoPor:resp}); k++;
   });
-  cerrarModal(); toast(n === 1 ? '1 cliente importado' : `${n} clientes importados`, 'ok'); go('clientes');
+  return k;
+}
+function confirmarImport(){
+  const resp = $('#impResp').value; let n = 0, ns = 0;
+  const segDup = $('#impSegDup') ? $('#impSegDup').checked : false;
+  filasImport.forEach(f => {
+    if(f.sel){
+      const c = guardar('clientes', {tipo:f.tipo||'Persona', nombre:f.nombre||f.telefono, identificacion:f.identificacion||'', empresa:f.empresa||'', cargo:f.cargo||'', telefono:f.telefono||'', email:f.email||'', ciudad:f.ciudad||'', origen:f.origen||'', etiquetas:'importado', notas:f.notas||'', responsable:resp});
+      let neg = null;
+      if(f.linea) neg = guardar('negocios', {clienteId:c.id, linea:f.linea, servicio:String(f.servicio||''), etapa:f.etapa||'Nuevo', valor:f.valor||'', fechaCierre:f.etapa==='Ganado'?hoy():'', fechaVencimiento:f.fechaVencimiento||'', responsable:resp, notas:''});
+      if(f.segs && f.segs.length) ns += programarSegsImport(c.id, neg ? neg.id : '', f.segs, resp);
+      n++;
+    } else if(segDup && f.existenteId && f.segs && f.segs.length){
+      const neg = negocioPrincipal(f.existenteId);
+      ns += programarSegsImport(f.existenteId, neg ? neg.id : '', f.segs, resp);
+    }
+  });
+  cerrarModal();
+  toast((n === 1 ? '1 cliente importado' : `${n} clientes importados`) + (ns ? ` · ${ns} seguimientos en la Agenda` : ''), 'ok'); go('clientes');
 }
 
 /* ---------- avisos ---------- */
